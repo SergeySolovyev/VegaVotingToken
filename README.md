@@ -1,0 +1,2 @@
+# VegaVotingToken
+VegaVotingToken
