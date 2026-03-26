@@ -17,37 +17,27 @@ contract VegaVotingTest is Test {
     address public alice = address(2);
     address public bob   = address(3);
 
-    uint256 constant YEAR = 365 days;
+    uint256 constant QUARTER = 91 days;
     uint256 constant TOKENS = 100 ether; // 100 VV
 
     function setUp() public {
         vm.startPrank(admin);
 
-        // Deploy token
         vvToken = new VegaVotingToken(admin);
-
-        // Deploy staking
         staking = new VegaVotingStaking(address(vvToken), admin);
 
-        // Deploy result NFT -- owner will be set to governance after deployment
-        // We deploy governance first, then NFT with governance as owner
-        // But governance needs NFT address... so deploy NFT with admin, then transfer ownership.
+        // Deploy NFT with admin as temporary owner, then transfer to governance.
         resultNFT = new VegaVotingResultNFT(admin);
-
-        // Deploy governance
         governance = new VegaVotingGovernance(address(staking), address(resultNFT), admin);
-
-        // Transfer NFT ownership to governance so only governance can mint
         resultNFT.transferOwnership(address(governance));
 
-        // Mint tokens to alice and bob
         vvToken.mint(alice, 1000 ether);
         vvToken.mint(bob, 500 ether);
 
         vm.stopPrank();
     }
 
-    // -- Token Tests--
+    // -- Token Tests --
 
     function test_TokenNameAndSymbol() public view {
         assertEq(vvToken.name(), "VegaVoting");
@@ -60,17 +50,31 @@ contract VegaVotingTest is Test {
         vvToken.mint(alice, 100 ether);
     }
 
-    // -- Staking Tests--
+    // -- Staking Tests --
 
     function test_StakeAndGetVotingPower() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
-        staking.stake(TOKENS, 2); // 2 years
+        staking.stake(TOKENS, 8); // 8 quarters = 2 years
         vm.stopPrank();
 
         uint256 vp = staking.getVotingPower(alice);
-        // VP = D_remain^2 * A = (2 * 365 days)^2 * 100e18
-        uint256 expected = uint256(2 * YEAR) * uint256(2 * YEAR) * TOKENS;
+        // VP = D_remain^2 * A = (8 * 91 days)^2 * 100e18
+        uint256 dur = 8 * QUARTER;
+        uint256 expected = dur * dur * TOKENS;
+        assertEq(vp, expected);
+    }
+
+    function test_StakeFractionalDuration() public {
+        // 5 quarters = 1.25 years -- rational duration in Q intersect [1,4]
+        vm.startPrank(alice);
+        vvToken.approve(address(staking), TOKENS);
+        staking.stake(TOKENS, 5);
+        vm.stopPrank();
+
+        uint256 vp = staking.getVotingPower(alice);
+        uint256 dur = 5 * QUARTER;
+        uint256 expected = dur * dur * TOKENS;
         assertEq(vp, expected);
     }
 
@@ -79,10 +83,13 @@ contract VegaVotingTest is Test {
         vvToken.approve(address(staking), TOKENS);
 
         vm.expectRevert();
-        staking.stake(TOKENS, 0); // 0 years -- invalid
+        staking.stake(TOKENS, 0); // 0 quarters -- invalid
 
         vm.expectRevert();
-        staking.stake(TOKENS, 5); // 5 years -- invalid
+        staking.stake(TOKENS, 3); // 3 quarters = 0.75 years -- below minimum
+
+        vm.expectRevert();
+        staking.stake(TOKENS, 17); // 17 quarters = 4.25 years -- above maximum
 
         vm.stopPrank();
     }
@@ -91,24 +98,24 @@ contract VegaVotingTest is Test {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
         vm.expectRevert();
-        staking.stake(0, 1);
+        staking.stake(0, 4);
         vm.stopPrank();
     }
 
     function test_VotingPowerDecaysOverTime() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
-        staking.stake(TOKENS, 2); // 2 years
+        staking.stake(TOKENS, 8); // 8 quarters = 2 years
         vm.stopPrank();
 
         uint256 vpBefore = staking.getVotingPower(alice);
 
-        // Advance 1 year
-        vm.warp(block.timestamp + YEAR);
+        // Advance 4 quarters (1 year)
+        vm.warp(block.timestamp + 4 * QUARTER);
 
         uint256 vpAfter = staking.getVotingPower(alice);
-        // After 1 year, D_remain = 1 year. VP = (1 year)^2 * 100e18
-        uint256 expectedAfter = uint256(YEAR) * uint256(YEAR) * TOKENS;
+        uint256 remaining = 4 * QUARTER;
+        uint256 expectedAfter = remaining * remaining * TOKENS;
         assertEq(vpAfter, expectedAfter);
         assertGt(vpBefore, vpAfter);
     }
@@ -116,11 +123,10 @@ contract VegaVotingTest is Test {
     function test_VotingPowerZeroAfterExpiry() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
-        staking.stake(TOKENS, 1);
+        staking.stake(TOKENS, 4); // 4 quarters = 1 year
         vm.stopPrank();
 
-        // Advance past expiry
-        vm.warp(block.timestamp + YEAR + 1);
+        vm.warp(block.timestamp + 4 * QUARTER + 1);
         uint256 vp = staking.getVotingPower(alice);
         assertEq(vp, 0);
     }
@@ -128,12 +134,12 @@ contract VegaVotingTest is Test {
     function test_UnstakeAfterExpiry() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
-        staking.stake(TOKENS, 1);
+        staking.stake(TOKENS, 4);
         vm.stopPrank();
 
         uint256 balBefore = vvToken.balanceOf(alice);
 
-        vm.warp(block.timestamp + YEAR);
+        vm.warp(block.timestamp + 4 * QUARTER);
         vm.prank(alice);
         staking.unstake(0);
 
@@ -144,7 +150,7 @@ contract VegaVotingTest is Test {
     function test_UnstakeBeforeExpiryReverts() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
-        staking.stake(TOKENS, 2);
+        staking.stake(TOKENS, 8);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -155,28 +161,29 @@ contract VegaVotingTest is Test {
     function test_MultipleStakes() public {
         vm.startPrank(alice);
         vvToken.approve(address(staking), 200 ether);
-        staking.stake(100 ether, 1);
-        staking.stake(100 ether, 4);
+        staking.stake(100 ether, 4);  // 1 year
+        staking.stake(100 ether, 16); // 4 years
         vm.stopPrank();
 
         uint256 vp = staking.getVotingPower(alice);
-        uint256 expected = uint256(YEAR) * uint256(YEAR) * 100 ether
-                         + uint256(4 * YEAR) * uint256(4 * YEAR) * 100 ether;
+        uint256 dur1 = 4 * QUARTER;
+        uint256 dur4 = 16 * QUARTER;
+        uint256 expected = dur1 * dur1 * 100 ether + dur4 * dur4 * 100 ether;
         assertEq(vp, expected);
         assertEq(staking.getStakeCount(alice), 2);
     }
 
-    // -- Governance Tests--
+    // -- Governance Tests --
 
     function _stakeForAliceAndBob() internal {
         vm.startPrank(alice);
         vvToken.approve(address(staking), 200 ether);
-        staking.stake(200 ether, 2);
+        staking.stake(200 ether, 8); // 2 years
         vm.stopPrank();
 
         vm.startPrank(bob);
         vvToken.approve(address(staking), 100 ether);
-        staking.stake(100 ether, 2);
+        staking.stake(100 ether, 8); // 2 years
         vm.stopPrank();
     }
 
@@ -280,13 +287,11 @@ contract VegaVotingTest is Test {
         bytes32 vid = keccak256("vote-1");
         uint256 deadline = block.timestamp + 7 days;
 
-        // Set threshold unreachably high so it finalizes by deadline
         _createVoting(vid, deadline, type(uint256).max);
 
         vm.prank(alice);
         governance.castVote(vid, true);
 
-        // Warp past deadline
         vm.warp(deadline);
         governance.finalizeVoting(vid);
 
@@ -300,19 +305,16 @@ contract VegaVotingTest is Test {
         uint256 deadline = block.timestamp + 7 days;
 
         uint256 aliceVP = staking.getVotingPower(alice);
-        // Set threshold equal to Alice's voting power
         _createVoting(vid, deadline, aliceVP);
 
         vm.prank(alice);
         governance.castVote(vid, true);
 
-        // Finalize early -- threshold met
+        // Threshold met -- finalize early
         governance.finalizeVoting(vid);
 
         (,,,,,, VegaVotingGovernance.VoteStatus status, uint256 nftId) = governance.getVoting(vid);
         assertEq(uint256(status), uint256(VegaVotingGovernance.VoteStatus.Finalized));
-
-        // NFT minted to admin
         assertEq(resultNFT.ownerOf(nftId), admin);
     }
 
@@ -349,7 +351,7 @@ contract VegaVotingTest is Test {
         assertTrue(passed);
         assertGt(noVotes, 0);
 
-        // tokenURI should not revert
+        // tokenURI must not revert
         string memory uri = resultNFT.tokenURI(nftId);
         assertTrue(bytes(uri).length > 0);
     }
@@ -373,14 +375,14 @@ contract VegaVotingTest is Test {
         vm.startPrank(alice);
         vvToken.approve(address(staking), TOKENS);
         vm.expectRevert();
-        staking.stake(TOKENS, 1);
+        staking.stake(TOKENS, 4);
         vm.stopPrank();
 
         vm.prank(admin);
         staking.unpause();
 
         vm.startPrank(alice);
-        staking.stake(TOKENS, 1);
+        staking.stake(TOKENS, 4);
         vm.stopPrank();
     }
 
@@ -398,21 +400,22 @@ contract VegaVotingTest is Test {
         governance.unpause();
     }
 
-    // -- Full E2E Scenario--
+    // -- End-to-End Scenario --
 
     function test_FullE2EScenario() public {
-        // 1. Alice and Bob stake
+        // 1. Alice stakes 500 VV for 16 quarters (4 years)
         vm.startPrank(alice);
         vvToken.approve(address(staking), 500 ether);
-        staking.stake(500 ether, 4); // 4 years
+        staking.stake(500 ether, 16);
         vm.stopPrank();
 
+        // 2. Bob stakes 200 VV for 5 quarters (1.25 years -- fractional)
         vm.startPrank(bob);
         vvToken.approve(address(staking), 200 ether);
-        staking.stake(200 ether, 1); // 1 year
+        staking.stake(200 ether, 5);
         vm.stopPrank();
 
-        // 2. Admin creates a vote
+        // 3. Admin creates a vote
         bytes32 vid = keccak256("proposal-alpha");
         uint256 deadline = block.timestamp + 14 days;
         uint256 aliceVP = staking.getVotingPower(alice);
@@ -420,14 +423,14 @@ contract VegaVotingTest is Test {
         vm.prank(admin);
         governance.createVoting(vid, deadline, aliceVP, "Should we upgrade the protocol?");
 
-        // 3. Alice votes yes
+        // 4. Alice votes yes
         vm.prank(alice);
         governance.castVote(vid, true);
 
-        // 4. Early finalization -- threshold met by Alice alone
+        // 5. Early finalization -- threshold met
         governance.finalizeVoting(vid);
 
-        // 5. Verify
+        // 6. Verify
         (,,,, uint256 yesVotes, uint256 noVotes, VegaVotingGovernance.VoteStatus status, uint256 nftId) =
             governance.getVoting(vid);
         assertEq(uint256(status), uint256(VegaVotingGovernance.VoteStatus.Finalized));

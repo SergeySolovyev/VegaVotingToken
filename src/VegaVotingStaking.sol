@@ -9,20 +9,26 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /**
  * @title VegaVotingStaking
- * @notice Manages staking of VV tokens. Users stake A_i tokens for a duration D_i in {1, 2, 3, 4} (in years).
- *         Voting power is calculated as: VP_U(t) = sum_i D_i_remain(t)^2 * A_i,
- *         where D_i_remain(t) = T_expiry - t.
- * @dev Duration is expressed in seconds internally but constrained to 1--4 whole years at stake time.
+ * @notice Manages staking of VV tokens. Users stake A_i tokens for a duration
+ *         D_i in Q intersect [1, 4], expressed in quarter-year increments
+ *         (i.e. 4 to 16 quarters, corresponding to 1.0 to 4.0 years).
+ *
+ *         Voting power is computed as:
+ *           VP_U(t) = sum_i D_i_remain(t)^2 * A_i
+ *         where D_i_remain(t) = T_expiry_i - t.
+ *
+ * @dev Duration is stored in seconds internally. The minimum granularity is
+ *      one quarter (QUARTER = 91 days). Callers pass durationQuarters in [4, 16].
  */
 contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // -- Constants--
-    uint256 public constant MIN_DURATION = 365 days;   // ~1 year
-    uint256 public constant MAX_DURATION = 4 * 365 days; // ~4 years
-    uint256 public constant DURATION_UNIT = 365 days;   // 1 year granularity ({1, 2, 3, 4} years)
+    // -- Constants --
+    uint256 public constant QUARTER = 91 days;          // ~0.25 year
+    uint256 public constant MIN_QUARTERS = 4;            // 1 year  = 4 quarters
+    uint256 public constant MAX_QUARTERS = 16;           // 4 years = 16 quarters
 
-    // -- State--
+    // -- State --
     IERC20 public immutable vvToken;
 
     struct Stake {
@@ -34,12 +40,18 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
     /// @notice user => array of stakes
     mapping(address => Stake[]) public stakes;
 
-    // -- Events--
-    event Staked(address indexed user, uint256 stakeIndex, uint256 amount, uint256 duration, uint256 expiry);
+    // -- Events --
+    event Staked(
+        address indexed user,
+        uint256 stakeIndex,
+        uint256 amount,
+        uint256 durationSeconds,
+        uint256 expiry
+    );
     event Unstaked(address indexed user, uint256 stakeIndex, uint256 amount);
 
-    // -- Errors--
-    error InvalidDuration(uint256 duration);
+    // -- Errors --
+    error InvalidDuration(uint256 durationQuarters);
     error ZeroAmount();
     error StakeNotExpired(uint256 expiry);
     error StakeAlreadyWithdrawn();
@@ -49,22 +61,24 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         vvToken = IERC20(_vvToken);
     }
 
-    // -- External Functions--
+    // -- External Functions --
 
     /**
-     * @notice Stake `amount` VV tokens for `durationYears` years (1, 2, 3, or 4).
+     * @notice Stake `amount` VV tokens for `durationQuarters` quarters.
+     * @dev durationQuarters must be in [4, 16], corresponding to [1.0, 4.0] years
+     *      in 0.25-year steps (i.e. D_i in Q intersect [1, 4]).
      * @param amount Amount of VV tokens to stake.
-     * @param durationYears Lock duration in whole years (must be 1, 2, 3, or 4).
+     * @param durationQuarters Lock duration in quarters (4 = 1 year, ..., 16 = 4 years).
      */
-    function stake(uint256 amount, uint256 durationYears) external whenNotPaused nonReentrant {
+    function stake(uint256 amount, uint256 durationQuarters) external whenNotPaused nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        uint256 durationSeconds = durationYears * DURATION_UNIT;
-        if (durationSeconds < MIN_DURATION || durationSeconds > MAX_DURATION) {
-            revert InvalidDuration(durationYears);
+        if (durationQuarters < MIN_QUARTERS || durationQuarters > MAX_QUARTERS) {
+            revert InvalidDuration(durationQuarters);
         }
 
         vvToken.safeTransferFrom(msg.sender, address(this), amount);
 
+        uint256 durationSeconds = durationQuarters * QUARTER;
         uint256 expiry = block.timestamp + durationSeconds;
         uint256 idx = stakes[msg.sender].length;
         stakes[msg.sender].push(Stake({
@@ -92,14 +106,14 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         emit Unstaked(msg.sender, stakeIndex, s.amount);
     }
 
-    // -- View Functions--
+    // -- View Functions --
 
     /**
      * @notice Calculate the current voting power of a user.
      *         VP_U(t) = sum_i D_i_remain(t)^2 * A_i
      *         where D_i_remain(t) = max(T_expiry_i - t, 0)
-     * @dev Voting power is expressed in (seconds^2 * token_wei). This preserves full precision
-     *      on-chain. Off-chain, divide by (365 days)^2 to get "year^2 * tokens" units.
+     * @dev Voting power is expressed in (seconds^2 * token_wei). This preserves
+     *      full precision on-chain.
      * @param user The address to query.
      * @return vp The total voting power (in raw units: seconds^2 * wei).
      */
@@ -109,8 +123,8 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         for (uint256 i; i < len;) {
             Stake storage s = userStakes[i];
             if (!s.withdrawn && block.timestamp < s.expiry) {
-                uint256 remaining = s.expiry - block.timestamp; // D_remain in seconds
-                vp += remaining * remaining * s.amount;         // D_remain^2 * A_i
+                uint256 remaining = s.expiry - block.timestamp;
+                vp += remaining * remaining * s.amount;
             }
             unchecked { ++i; }
         }
@@ -131,7 +145,7 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         return (s.amount, s.expiry, s.withdrawn);
     }
 
-    // -- Admin Functions--
+    // -- Admin Functions --
 
     function pause() external onlyOwner {
         _pause();

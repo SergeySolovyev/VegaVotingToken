@@ -96,7 +96,7 @@ contract SetupVote is Script {
 
         // Admin stakes
         vvToken.approve(address(staking), 500 ether);
-        staking.stake(500 ether, 2); // 2 years
+        staking.stake(500 ether, 8); // 8 quarters = 2 years
 
         // Create a voting
         bytes32 votingId = keccak256("proposal-001");
@@ -116,7 +116,7 @@ contract SetupVote is Script {
         vm.startBroadcast(voterKey);
 
         vvToken.approve(address(staking), 200 ether);
-        staking.stake(200 ether, 1); // 1 year
+        staking.stake(200 ether, 4); // 4 quarters = 1 year
 
         governance.castVote(votingId, false);
 
