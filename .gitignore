@@ -1,0 +1,15 @@
+# Compiler files
+cache/
+out/
+
+# Environment
+.env
+
+# Foundry broadcast
+broadcast/
+
+# Dependencies (reinstalled with forge install)
+lib/
+
+# OS
+.DS_Store
