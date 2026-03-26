@@ -6,8 +6,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title VegaVotingToken (VV)
- * @notice ERC-20 token used for staking and governance voting in the Vega Voting Protocol.
- * @dev The owner (admin) can mint tokens. Standard ERC-20 otherwise.
+ * @notice ERC-20 token used for staking and governance voting.
+ * @dev Only the owner (admin) can mint new tokens.
  */
 contract VegaVotingToken is ERC20, Ownable {
     constructor(address initialOwner) ERC20("VegaVoting", "VV") Ownable(initialOwner) {}

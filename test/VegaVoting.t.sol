@@ -29,7 +29,7 @@ contract VegaVotingTest is Test {
         // Deploy staking
         staking = new VegaVotingStaking(address(vvToken), admin);
 
-        // Deploy result NFT — owner will be set to governance after deployment
+        // Deploy result NFT -- owner will be set to governance after deployment
         // We deploy governance first, then NFT with governance as owner
         // But governance needs NFT address... so deploy NFT with admin, then transfer ownership.
         resultNFT = new VegaVotingResultNFT(admin);
@@ -47,9 +47,7 @@ contract VegaVotingTest is Test {
         vm.stopPrank();
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Token Tests
-    // ──────────────────────────────────────────────────────────────
+    // -- Token Tests--
 
     function test_TokenNameAndSymbol() public view {
         assertEq(vvToken.name(), "VegaVoting");
@@ -62,9 +60,7 @@ contract VegaVotingTest is Test {
         vvToken.mint(alice, 100 ether);
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Staking Tests
-    // ──────────────────────────────────────────────────────────────
+    // -- Staking Tests--
 
     function test_StakeAndGetVotingPower() public {
         vm.startPrank(alice);
@@ -83,10 +79,10 @@ contract VegaVotingTest is Test {
         vvToken.approve(address(staking), TOKENS);
 
         vm.expectRevert();
-        staking.stake(TOKENS, 0); // 0 years — invalid
+        staking.stake(TOKENS, 0); // 0 years -- invalid
 
         vm.expectRevert();
-        staking.stake(TOKENS, 5); // 5 years — invalid
+        staking.stake(TOKENS, 5); // 5 years -- invalid
 
         vm.stopPrank();
     }
@@ -170,9 +166,7 @@ contract VegaVotingTest is Test {
         assertEq(staking.getStakeCount(alice), 2);
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Governance Tests
-    // ──────────────────────────────────────────────────────────────
+    // -- Governance Tests--
 
     function _stakeForAliceAndBob() internal {
         vm.startPrank(alice);
@@ -312,7 +306,7 @@ contract VegaVotingTest is Test {
         vm.prank(alice);
         governance.castVote(vid, true);
 
-        // Finalize early — threshold met
+        // Finalize early -- threshold met
         governance.finalizeVoting(vid);
 
         (,,,,,, VegaVotingGovernance.VoteStatus status, uint256 nftId) = governance.getVoting(vid);
@@ -404,9 +398,7 @@ contract VegaVotingTest is Test {
         governance.unpause();
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Full E2E Scenario
-    // ──────────────────────────────────────────────────────────────
+    // -- Full E2E Scenario--
 
     function test_FullE2EScenario() public {
         // 1. Alice and Bob stake
@@ -432,7 +424,7 @@ contract VegaVotingTest is Test {
         vm.prank(alice);
         governance.castVote(vid, true);
 
-        // 4. Early finalization — threshold met by Alice alone
+        // 4. Early finalization -- threshold met by Alice alone
         governance.finalizeVoting(vid);
 
         // 5. Verify

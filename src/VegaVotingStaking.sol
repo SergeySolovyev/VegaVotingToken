@@ -9,36 +9,36 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /**
  * @title VegaVotingStaking
- * @notice Manages staking of VV tokens. Users stake A_i tokens for a duration D_i ∈ Q ∩ [1,4] (in years).
- *         Voting power is calculated as: VP_U(t) = Σ D_i_remain(t)^2 * A_i,
+ * @notice Manages staking of VV tokens. Users stake A_i tokens for a duration D_i in {1, 2, 3, 4} (in years).
+ *         Voting power is calculated as: VP_U(t) = sum_i D_i_remain(t)^2 * A_i,
  *         where D_i_remain(t) = T_expiry - t.
- * @dev Duration is expressed in seconds internally but constrained to 1–4 years at stake time.
+ * @dev Duration is expressed in seconds internally but constrained to 1--4 whole years at stake time.
  */
 contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // ─── Constants ─────────────────────────────────────────────
+    // -- Constants--
     uint256 public constant MIN_DURATION = 365 days;   // ~1 year
     uint256 public constant MAX_DURATION = 4 * 365 days; // ~4 years
-    uint256 public constant DURATION_UNIT = 365 days;   // 1 year granularity (Q ∩ [1,4] → 1,2,3,4 years)
+    uint256 public constant DURATION_UNIT = 365 days;   // 1 year granularity ({1, 2, 3, 4} years)
 
-    // ─── State ─────────────────────────────────────────────────
+    // -- State--
     IERC20 public immutable vvToken;
 
     struct Stake {
-        uint256 amount;      // A_i — amount of VV tokens staked
-        uint256 expiry;      // T_expiry — timestamp when stake expires
+        uint256 amount;      // A_i: amount of VV tokens staked
+        uint256 expiry;      // T_expiry: timestamp when stake expires
         bool withdrawn;      // whether the stake has been withdrawn
     }
 
     /// @notice user => array of stakes
     mapping(address => Stake[]) public stakes;
 
-    // ─── Events ────────────────────────────────────────────────
+    // -- Events--
     event Staked(address indexed user, uint256 stakeIndex, uint256 amount, uint256 duration, uint256 expiry);
     event Unstaked(address indexed user, uint256 stakeIndex, uint256 amount);
 
-    // ─── Errors ────────────────────────────────────────────────
+    // -- Errors--
     error InvalidDuration(uint256 duration);
     error ZeroAmount();
     error StakeNotExpired(uint256 expiry);
@@ -49,7 +49,7 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         vvToken = IERC20(_vvToken);
     }
 
-    // ─── External Functions ────────────────────────────────────
+    // -- External Functions--
 
     /**
      * @notice Stake `amount` VV tokens for `durationYears` years (1, 2, 3, or 4).
@@ -92,11 +92,11 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         emit Unstaked(msg.sender, stakeIndex, s.amount);
     }
 
-    // ─── View Functions ────────────────────────────────────────
+    // -- View Functions--
 
     /**
      * @notice Calculate the current voting power of a user.
-     *         VP_U(t) = Σ D_i_remain(t)^2 * A_i
+     *         VP_U(t) = sum_i D_i_remain(t)^2 * A_i
      *         where D_i_remain(t) = max(T_expiry_i - t, 0)
      * @dev Voting power is expressed in (seconds^2 * token_wei). This preserves full precision
      *      on-chain. Off-chain, divide by (365 days)^2 to get "year^2 * tokens" units.
@@ -131,7 +131,7 @@ contract VegaVotingStaking is Ownable, Pausable, ReentrancyGuard {
         return (s.amount, s.expiry, s.withdrawn);
     }
 
-    // ─── Admin Functions ───────────────────────────────────────
+    // -- Admin Functions--
 
     function pause() external onlyOwner {
         _pause();

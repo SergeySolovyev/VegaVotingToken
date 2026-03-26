@@ -122,7 +122,7 @@ contract SetupVote is Script {
 
         vm.stopBroadcast();
 
-        console.log("Vote set up successfully!");
+        console.log("Vote setup complete.");
         console.log("Admin:", admin);
         console.log("Voter:", voter);
     }

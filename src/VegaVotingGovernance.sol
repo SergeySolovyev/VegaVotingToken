@@ -23,7 +23,7 @@ import {VegaVotingResultNFT} from "./VegaVotingResultNFT.sol";
  */
 contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
 
-    // ─── State ─────────────────────────────────────────────────
+    // -- State--
     VegaVotingStaking public immutable staking;
     VegaVotingResultNFT public immutable resultNFT;
 
@@ -50,12 +50,12 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
     /// @notice votingId => voter => hasVoted
     mapping(bytes32 => mapping(address => bool)) public hasVoted;
 
-    // ─── Events ────────────────────────────────────────────────
+    // -- Events--
     event VotingCreated(bytes32 indexed id, uint256 deadline, uint256 votingPowerThreshold, string description);
     event VoteCast(bytes32 indexed votingId, address indexed voter, bool support, uint256 votingPower);
     event VotingFinalized(bytes32 indexed votingId, bool passed, uint256 yesVotes, uint256 noVotes, uint256 nftTokenId);
 
-    // ─── Errors ────────────────────────────────────────────────
+    // -- Errors--
     error VotingAlreadyExists(bytes32 id);
     error VotingNotFound(bytes32 id);
     error VotingNotActive(bytes32 id);
@@ -71,7 +71,7 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
         resultNFT = VegaVotingResultNFT(_resultNFT);
     }
 
-    // ─── Admin Functions ───────────────────────────────────────
+    // -- Admin Functions--
 
     /**
      * @notice Create a new voting.
@@ -105,7 +105,7 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
         emit VotingCreated(id, deadline, votingPowerThreshold, description);
     }
 
-    // ─── Voting ────────────────────────────────────────────────
+    // -- Voting--
 
     /**
      * @notice Cast a yes or no vote on a voting.
@@ -133,12 +133,12 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
         emit VoteCast(votingId, msg.sender, support, vp);
     }
 
-    // ─── Finalization ──────────────────────────────────────────
+    // -- Finalization--
 
     /**
      * @notice Finalize a voting once the deadline has passed or the threshold is met.
      *         Mints an NFT with the results.
-     * @dev Anyone can call this — no special role required.
+     * @dev Anyone can call this; no special role is required.
      *      Early finalization: yesVotes >= votingPowerThreshold.
      *      Normal finalization: block.timestamp >= deadline.
      * @param votingId The voting identifier.
@@ -171,7 +171,7 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
         emit VotingFinalized(votingId, passed, v.yesVotes, v.noVotes, tokenId);
     }
 
-    // ─── View Functions ────────────────────────────────────────
+    // -- View Functions--
 
     function getVotingCount() external view returns (uint256) {
         return votingIds.length;
@@ -191,7 +191,7 @@ contract VegaVotingGovernance is Ownable, Pausable, ReentrancyGuard {
         return (v.id, v.deadline, v.votingPowerThreshold, v.description, v.yesVotes, v.noVotes, v.status, v.resultTokenId);
     }
 
-    // ─── Emergency Controls ────────────────────────────────────
+    // -- Emergency Controls--
 
     function pause() external onlyOwner {
         _pause();
